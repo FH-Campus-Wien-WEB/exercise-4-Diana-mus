@@ -91,19 +91,69 @@ app.get("/movies/:imdbID", requireLogin, function (req, res) {
 });
 
 // Configure a 'put' endpoint for a specific movie to update or insert a movie
+
 app.put("/movies/:imdbID", requireLogin, function (req, res) {
   const username = req.session.user.username;
   const imdbID = req.params.imdbID;
   const exists = movieModel.getUserMovie(username, imdbID) !== undefined;
 
-  if (!exists) {
-    // Task 2.3: Fetch the movie data from OmdbAPI, follow the pattern used further down 
-    // in the GET /search endpoint. Implement conversion of the OmdbAPI response to the 
-    // movie format used in the frontend. Make sure to handle errors and timeouts properly.
-  } else {
+  // Task 2.3: Fetch the movie data from OmdbAPI, follow the pattern used further down 
+  // in the GET /search endpoint. Implement conversion of the OmdbAPI response to the 
+  // movie format used in the frontend. Make sure to handle errors and timeouts properly.
+  if (exists) {
     movieModel.setUserMovie(username, imdbID, req.body);
-    res.sendStatus(200);
+    return res.sendStatus(200);
   }
+
+  const url = `http://www.omdbapi.com/?i=${encodeURIComponent(imdbID)}&apikey=${config.omdbApiKey}`;
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), config.omdbTimeoutMs);
+
+  fetch(url, { signal: controller.signal })
+    .then(apiRes => {
+      clearTimeout(timeoutId);
+
+      if (!apiRes.ok) {
+        throw new Error(`OMDb HTTP ${apiRes.status}`);
+      }
+
+      return apiRes.json();
+    })
+    .then(omdbMovie => {
+      if (omdbMovie.Response === "False") {
+        return res.sendStatus(404);
+      }
+
+      const movie = {
+        imdbID: omdbMovie.imdbID,
+        Title: omdbMovie.Title,
+        Released: omdbMovie.Released,
+        Runtime: parseInt(omdbMovie.Runtime),
+        Genres: omdbMovie.Genre ? omdbMovie.Genre.split(",").map(genre => genre.trim()) : [],
+        Directors: omdbMovie.Director ? omdbMovie.Director.split(",").map(director => director.trim()) : [],
+        Writers: omdbMovie.Writer ? omdbMovie.Writer.split(",").map(writer => writer.trim()) : [],
+        Actors: omdbMovie.Actors ? omdbMovie.Actors.split(",").map(actor => actor.trim()) : [],
+        Plot: omdbMovie.Plot,
+        Poster: omdbMovie.Poster,
+        Metascore: omdbMovie.Metascore,
+        imdbRating: omdbMovie.imdbRating
+      };
+
+      movieModel.setUserMovie(username, imdbID, movie);
+      res.status(201).json(movie);
+    })
+    .catch(err => {
+      clearTimeout(timeoutId);
+
+      if (err.name === "AbortError") {
+        console.error("OMDb API request timeout");
+        return res.sendStatus(504);
+      }
+
+      console.error("OMDb API error:", err);
+      res.sendStatus(500);
+    });
 });
 
 app.delete("/movies/:imdbID", requireLogin, function (req, res) {

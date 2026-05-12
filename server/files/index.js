@@ -82,26 +82,31 @@ function loadMovies(genre) {
       mainElement.append(`${messages.dataLoadError} ${error.message}`);
     });
 }
-
+// Task 2.2: Make sure to remove the added movie from the search results to avoid
+// giving the user the option to add it again.
 function addMovie(imdbID) {
-  fetch(`/movies/${imdbID}`, { method: 'PUT' })
-    .then(response => {
-      if (response.status === 201) {
-        // Task 2.2: Make sure to remove the added movie from the search results to avoid
-        // giving the user the option to add it again.
+  return fetch(`/movies/${imdbID}`, {
+    method: "PUT"
+  }).then(response => {
+    if (response.status === 201) {
+      loadMovies();
+      updateGenres();
+      return true;
+    }
 
-        loadMovies();
-        updateGenres();
-      } else if (response.status === 200) {
-        alert(messages.movieAlreadyInCollection);
-      } else {
-        throw new Error(`HTTP ${response.status}`);
-      }
-    })
-    .catch(error => {
-      console.error('Failed to add movie:', error);
-      alert(messages.addMovieFailed);
-    });
+    if (response.status === 200) {
+      alert(messages.movieAlreadyInCollection);
+      return false;
+    }
+
+    if (response.status === 401) {
+      currentSession = null;
+      updateUI();
+      throw new Error("You are not logged in anymore. Please log in again.");
+    }
+
+    throw new Error(`HTTP ${response.status}`);
+  });
 }
 
 function deleteMovie(imdbID) {
@@ -122,28 +127,67 @@ function deleteMovie(imdbID) {
       alert(messages.deleteMovieFailed);
     });
 }
-
+// Task 2.2: Render the results returned from the server. Make sure to
+// include an "Add" button for each result that calls `addMovie(imdbID)` when clicked.
+// There is a second part to this task, in `addMovie`
 function searchMovies(query) {
+  const resultsDiv = document.getElementById("searchResults");
+  resultsDiv.innerHTML = "";
+
   fetch(`/search?query=${encodeURIComponent(query)}`)
     .then(response => {
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
       return response.json();
     })
     .then(results => {
-      const resultsDiv = document.getElementById("searchResults");
-      resultsDiv.innerHTML = '';
+      resultsDiv.innerHTML = "";
 
-      // Task 2.2: Render the results returned from the server. Make sure to
-      // include an "Add" button for each result that calls `addMovie(imdbID)` when clicked.
-      // There is a second part to this task, in `addMovie`
+      if (!results || results.length === 0) {
+        const message = document.createElement("p");
+        message.textContent = "No movies found.";
+        resultsDiv.appendChild(message);
+        return;
+      }
 
+      results.forEach(movie => {
+        const resultElement = document.createElement("article");
+
+        const title = document.createElement("p");
+        title.textContent = `${movie.Title} (${movie.Year ?? "unknown year"})`;
+
+        const addButton = document.createElement("button");
+        addButton.textContent = "Add";
+        addButton.type = "button";
+        addButton.addEventListener("click", () => {
+          addMovie(movie.imdbID)
+            .then(added => {
+              if (added) {
+                resultElement.remove();
+              }
+            })
+            .catch(error => {
+              console.error("Add movie failed", error);
+            });
+        });
+
+        resultElement.appendChild(title);
+        resultElement.appendChild(addButton);
+        resultsDiv.appendChild(resultElement);
+      });
     })
     .catch(error => {
-      console.error('Search failed:', error);
-      const resultsDiv = document.getElementById("searchResults");
-      new ElementBuilder("p").text(messages.searchFailed).appendTo(resultsDiv);
+      console.error("Search failed", error);
+      resultsDiv.innerHTML = "";
+
+      const message = document.createElement("p");
+      message.textContent = messages.searchFailed;
+      resultsDiv.appendChild(message);
     });
 }
+
 
 window.onload = function () {
   // Check session
@@ -274,7 +318,7 @@ window.onload = function () {
   });
 
   // Search dialog
-  /*
+
   document.getElementById('addMoviesBtn').addEventListener('click', () => {
     const searchForm = document.getElementById('searchForm');
     searchForm.reset();
@@ -291,6 +335,5 @@ window.onload = function () {
   document.getElementById('cancelSearch').addEventListener('click', () => {
     document.getElementById('searchDialog').close();
   });
-  */
 };
 
