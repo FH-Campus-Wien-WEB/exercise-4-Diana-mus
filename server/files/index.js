@@ -89,7 +89,7 @@ function addMovie(imdbID) {
       if (response.status === 201) {
         // Task 2.2: Make sure to remove the added movie from the search results to avoid
         // giving the user the option to add it again.
-    
+
         loadMovies();
         updateGenres();
       } else if (response.status === 200) {
@@ -168,6 +168,23 @@ window.onload = function () {
       // Task 1.2: Render a user greeting to `#userGreeting` 
       // using `firstName`, `lastName`, and the server-provided
       // login timestamp.
+      const firstName = currentSession.firstName;
+      const lastName = currentSession.lastName;
+      const loginTime = new Date(currentSession.loginTime);
+
+      const formattedDate = loginTime.toLocaleDateString("de-AT", {
+        day: "numeric",
+        month: "long",
+        year: "numeric"
+      });
+
+      const formattedTime = loginTime.toLocaleTimeString("de-AT", {
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+
+      greetingElement.textContent =
+        `Hi ${firstName} ${lastName}, du hast dich am ${formattedDate} um ${formattedTime} angemeldet.`;
     } else {
       greetingElement.textContent = messages.loggedOutGreeting;
     }
@@ -212,10 +229,44 @@ window.onload = function () {
     e.preventDefault();
     const formData = new FormData(e.target);
 
+
     // Task 1.1: Implement the login submit flow to call `POST /login` 
     // with username and password, handle errors, save the response 
     // into `currentSession`, then call `updateUI()` and `loadMovies()`.
 
+    console.log("Login form submitted");
+    const username = formData.get("username");
+    const password = formData.get("password");
+
+    fetch("/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        username: username,
+        password: password
+      })
+    })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error("Login failed");
+        }
+
+        return response.json();
+      })
+      .then(session => {
+        currentSession = session;
+
+        document.getElementById("loginDialog").close();
+
+        updateUI();
+        loadMovies();
+      })
+      .catch(error => {
+        console.error(error);
+        alert("Login failed. Please check your username and password.");
+      });
   });
 
   document.getElementById('cancelLogin').addEventListener('click', () => {
@@ -223,6 +274,7 @@ window.onload = function () {
   });
 
   // Search dialog
+  /*
   document.getElementById('addMoviesBtn').addEventListener('click', () => {
     const searchForm = document.getElementById('searchForm');
     searchForm.reset();
@@ -239,5 +291,6 @@ window.onload = function () {
   document.getElementById('cancelSearch').addEventListener('click', () => {
     document.getElementById('searchDialog').close();
   });
+  */
 };
 
